@@ -1,0 +1,23 @@
+{
+        "gym" : {
+        "url":"http://67.78.255.34:84/mjpg/video.mjpg?COUNTER",
+        "corner": [100, 100],
+        "resize_to": [700, 400],
+        "colour": [230, 78, 98]
+    },
+
+    "beach" : {
+        "url":"http://83.56.31.69:80/mjpg/video.mjpg?COUNTER",
+        "corner": [300, 600],
+        "resize_to": [500, 300],
+        "colour": [29, 24, 98]
+    },
+
+    "store": {
+        "url": "http://131.95.3.162:80/mjpg/video.mjpg?COUNTER",
+        "corner": [400, 400],
+        "resize_to": [500, 300],
+        "colour": [245, 93, 163]
+    }
+
+}
