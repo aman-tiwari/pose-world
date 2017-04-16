@@ -1,0 +1,4 @@
+*.pyc
+model/pose_model.pth
+js/places.json
+profilestats
