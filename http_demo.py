@@ -15,7 +15,6 @@ from web_demo import handle_one
 
 
 define("port", default=8888, help="run on the given port", type=int)
-us_store = 'http://131.95.3.162:80/mjpg/video.mjpg?COUNTER'
 
 # from http://stackoverflow.com/a/21844162
 def ip_cam_stream(mjpeg_stream):
