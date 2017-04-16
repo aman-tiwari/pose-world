@@ -1,5 +1,15 @@
-# pytorch_Realtime_Multi-Person_Pose_Estimation
+# Pose World
+
+This is the raw code for http://golancourses.net/excap17/a/04/13/a-event/
+
+**This relies entirely on [tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation](https://github.com/tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation). Reproduced below is the README.md at the time of this project.**
+
+My modifications to it include optimising the handle_one function in [web_demo.py](web_demo.py) and adding Websocket and zmq servers that expose an api to be able to remotely use this. In the [js/](js/) folder is an example client for the Websocket server, in the [zmq_stuff](zmq_stuff) folder is the (now possibly somewhat broken!) zmq client and server. 
+
+## pytorch_Realtime_Multi-Person_Pose_Estimation
 This is a pytorch version of Realtime_Multi-Person_Pose_Estimation, origin code is here https://github.com/ZheC/Realtime_Multi-Person_Pose_Estimation 
+
+**This relies entirely on [tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation](https://github.com/tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation). Reproduced below is the README.md at the time of this project.**
 
 ## Introduction
 Code repo for reproducing 2017 CVPR Oral paper using pytorch.  
