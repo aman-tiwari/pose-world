@@ -6,7 +6,9 @@ This is the raw code for http://golancourses.net/excap17/a/04/13/a-event/
 
 My modifications to it include optimising the handle_one function in [web_demo.py](web_demo.py) and adding [Websocket](http_demo.py) and [zmq](zmq_stuff/zmq_cv.py) servers that expose an api to be able to remotely use this. 
 
-In the [js/](js/) folder is an example client for the Websocket server, in the [zmq_stuff](zmq_stuff) folder is the (now possibly somewhat broken!) zmq client and server. To use the client, make a `places.json` in the [js/](js/) folder, following the template:
+In the [js/](js/) folder is an example client for the Websocket server, in the [zmq_stuff](zmq_stuff) folder is the (now possibly somewhat broken!) zmq client and server. 
+
+To use the client, `cd js` and `npm install`, then make a `places.json` in the [js/](js/) folder, following the template:
 ```
 {
     "place_name" : {
@@ -18,6 +20,7 @@ In the [js/](js/) folder is an example client for the Websocket server, in the [
 
 }
 ```
+Then, you can do `beefy main.js` to serve the client.
 An example `places.json` is included. 
 
 ## pytorch_Realtime_Multi-Person_Pose_Estimation
