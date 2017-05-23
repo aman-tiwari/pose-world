@@ -1,5 +1,10 @@
 *.pyc
 model/pose_model.pth
-js/places.json
 profilestats
 js/node_modules
+js/jsons
+js/*.tar
+.ipynb_checkpoints
+.vscode
+.DS_Store
+._.DS_Store

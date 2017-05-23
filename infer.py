@@ -1,15 +1,12 @@
+from __future__ import print_function
+
 import os
 import re
 import sys
 import cv2
 import math
 import time
-import scipy
-import argparse
-import matplotlib
 from torch import np
-import pylab as plt
-from joblib import Parallel, delayed
 import urllib
 import util
 import torch
@@ -20,20 +17,14 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from collections import OrderedDict
 from config_reader import config_reader
-from scipy.ndimage.filters import gaussian_filter
-#parser = argparse.ArgumentParser()
-#parser.add_argument('--t7_file', required=True)
-#parser.add_argument('--pth_file', required=True)
-#args = parser.parse_args()
-
-from scipy import signal
 from scipy.ndimage.filters import maximum_filter
-torch.set_num_threads(torch.get_num_threads())
-weight_name = './model/pose_model.pth'
+
+weight_name = 'model/pose_model.pth'
 
 blocks = {}
 
 # find connection in the specified sequence, center 29 is in the position 15
+# defines indexes (1 indexed) into output tensor of limb location predicitions
 limbSeq = [[2,3], [2,6], [3,4], [4,5], [6,7], [7,8], [2,9], [9,10], \
            [10,11], [2,12], [12,13], [13,14], [2,1], [1,15], [15,17], \
            [1,16], [16,18], [3,17], [6,18]]
@@ -68,7 +59,7 @@ bone_map = [
     'right_eye_ear' #16
 ]
 
-print len(colors)
+N_JOINTS = 18
 
 block0  = [{'conv1_1':[3,64,3,1,1]},{'conv1_2':[64,64,3,1,1]},{'pool1_stage1':[2,2,0]},{'conv2_1':[64,128,3,1,1]},{'conv2_2':[128,128,3,1,1]},{'pool2_stage1':[2,2,0]},{'conv3_1':[128,256,3,1,1]},{'conv3_2':[256,256,3,1,1]},{'conv3_3':[256,256,3,1,1]},{'conv3_4':[256,256,3,1,1]},{'pool3_stage1':[2,2,0]},{'conv4_1':[256,512,3,1,1]},{'conv4_2':[512,512,3,1,1]},{'conv4_3_CPM':[512,256,3,1,1]},{'conv4_4_CPM':[256,128,3,1,1]}]
 
@@ -163,178 +154,82 @@ class pose_model(nn.Module):
 
 
 model = pose_model(models)     
-model.load_state_dict(torch.load(weight_name))
+script_dir = os.path.dirname(os.path.realpath(__file__))
+model.load_state_dict(torch.load(os.path.join(script_dir, weight_name)))
 model.cuda()
 model.eval()
 model.requires_grad = False
 
 param_, model_ = config_reader()
 
-N_JOINTS = 18
+def max_erode(x_t):
+    return x_t.float() * torch.eq(x_t.float(), F.max_pool2d(x_t.float(), 3, 1, padding=1)).float()
 
-def handle_one(oriImg, dont_draw=False):
+def handle_one(oriImg, dont_draw=False, dont_resize=False):
     
-   # print 'here 1'
-
-    # for visualize
-    #if oriImg.shape[1] == 3:
-    #    oriImg = np.squeeze(np.transpose(oriImg, axes=(0, 2, 3, 1)))
     oriImg = np.squeeze(oriImg)
     oriImg = np.copy(oriImg)
     canvas = np.copy(oriImg)
-    #imageToTest = Variable(T.transpose(T.transpose(T.unsqueeze(torch.from_numpy(oriImg).float(),0),2,3),1,2),volatile=True).cuda()
-    #print oriImg.shape
-
-   # print 'here 2'
 
     scale = model_['boxsize'] / float(oriImg.shape[0])
-    #print scale
     h = int(oriImg.shape[0]*scale)
     w = int(oriImg.shape[1]*scale)
 
-    # print 'here 3'
 
     pad_h = 0 if (h%model_['stride']==0) else model_['stride'] - (h % model_['stride']) 
     pad_w = 0 if (w%model_['stride']==0) else model_['stride'] - (w % model_['stride'])
     new_h = h+pad_h
     new_w = w+pad_w
 
-   # print 'here 4', scale, oriImg.shape
-
-    #imageToTest = cv2.resize(oriImg, (0,0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-    imageToTest = cv2.resize(oriImg, (int(scale * oriImg.shape[0]), int(scale * oriImg.shape[1])), interpolation=cv2.INTER_CUBIC)
-    
-   # print 'here 5'
+    if dont_resize:
+        imageToTest = oriImg
+    else:
+        imageToTest = cv2.resize(oriImg, (int(scale * oriImg.shape[0]), int(scale * oriImg.shape[1])), interpolation=cv2.INTER_CUBIC)
 
     imageToTest_padded, pad = util.padRightDownCorner(imageToTest, model_['stride'], model_['padValue'])
 
-  #  print 'here 6'
-
     imageToTest_padded = np.transpose(np.float32(imageToTest_padded[:,:,:,np.newaxis]), (3,2,0,1))/255.0 - 0.5
-
-  #  print 'here 7'
 
     feed = Variable(T.from_numpy(imageToTest_padded), volatile=True).cuda()      
 
     p = time.time()
     output1, output2 = model(feed)
 
-    #print "model feed took: ", time.time() - p
-
     heatmap = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1])).cuda()(output2)
 
     paf = nn.UpsamplingBilinear2d((oriImg.shape[0], oriImg.shape[1])).cuda()(output1)       
     
-    pool = nn.MaxPool2d(3, stride=3, return_indices=True).cuda()
-    unpool = nn.MaxUnpool2d(3, stride=3).cuda()
-
-    #print heatmap.size()
-    #print paf.size()
-    #print type(heatmap)
-    #print heatmap.size()
-    heatmap_avg_tensor = heatmap[0]
-    #print heatmap_avg_tensor.size()
-    n_channels = heatmap_avg_tensor.size()[0]
-
     pool_t = time.time()
-    blurred_avg_tensor = F.avg_pool2d(heatmap[0], 3, stride=1, padding=1)
-    blurred_avg = blurred_avg_tensor.data.cpu().numpy()
-    pool_t = time.time() - pool_t
-    heatmap_avg = heatmap_avg_tensor.data.cpu().numpy()
-    # F.avg_pool2d(heatmap, 3, stride=1, padding=1)
-    #peak_vals_avg, peak_idxs = pool(heatmap)
-    #unpooled = unpool(peak_vals_avg, peak_idxs)[0].data.cpu().numpy()
+    map_ori = heatmap[0][:N_JOINTS]
+
+    map_max = max_erode(F.avg_pool2d(map_ori, 3, stride=1, padding=1)) # torch.eq(blurred_avg_tensor, max_tensor).float() * blurred_avg_tensor
+    
+    peaks_binary = map_max > param_['thre1']
+    all_peak_idxs = torch.nonzero(peaks_binary.data)
+
+    if all_peak_idxs.size() == ():
+        return None
+    
+    all_peak_idxs = all_peak_idxs.cpu().numpy()
+
+    
+    nonzero_vals = map_ori[peaks_binary].data.cpu().numpy()
+
     paf_avg = paf[0].data.cpu().numpy()
-    #print heatmap_avg.shape #, peak_vals_avg.size(), unpooled.shape
-    #print 'paf', paf_avg.shape
-    #print 'pool took', pool_t
-    all_peaks = []
-    peak_counter = 0
+
+    return post_process(oriImg, canvas, paf_avg, all_peak_idxs, nonzero_vals, dont_draw)
+
+def get_third_item(x):
+    return x[2]
+
+def post_process(oriImg, canvas, paf_avg, all_peak_idxs, nonzero_vals, dont_draw):
+
+    all_peaks = [[] for x in range(N_JOINTS)]
+
+    for i in xrange(all_peak_idxs.shape[0]):
+        all_peaks[all_peak_idxs[i, 0]].append((all_peak_idxs[i, 2], all_peak_idxs[i, 1], nonzero_vals[i], i))
+
     PEAKT = time.time()
-
-    # this code only here to validate if new method of computing peaks works ok    
-    OLD = False
-    if OLD:
-        for part in xrange(N_JOINTS):
-            map_ori = heatmap_avg[part, :,:]
-            map = gaussian_filter(map_ori, sigma=3)
-            map_left = np.zeros(map.shape)
-            map_left[1:,:] = map[:-1,:]
-            map_right = np.zeros(map.shape)
-            map_right[:-1,:] = map[1:,:]
-            map_up = np.zeros(map.shape)
-            map_up[:,1:] = map[:,:-1]
-            map_down = np.zeros(map.shape)
-            map_down[:,:-1] = map[:,1:]
-            
-            #print map_ori.shape, map_ori.dtype, map_ori.max(), map_ori.min()
-
-            #cv2.imshow('map_ori', ((map_ori / map_ori.max()) * 255.0).astype(np.uint8))
-            #cv2.imshow('map', ((map / map.max()) * 255.0).astype(np.uint8))
-
-            #map_diff = signal.convolve2d(map, diff_arr, mode='same')
-            #peaks_binary = (map_diff > param_['thre1'])
-            
-            #map_max = map_s * (map_s == maximum_filter(map_s, footprint=np.ones((3, 3)), mode='constant', cval=0.0))
-            #peaks_binary = map_max > param_['thre1']
-
-            peaks_binary = np.logical_and.reduce((map>=map_left, map>=map_right, map>=map_up, map>=map_down, map > param_['thre1']))
-
-            #peaks_binary = T.eq(
-            #peaks = zip(T.nonzero(peaks_binary)[0],T.nonzero(peaks_binary)[0])
-            
-            #cv2.imshow('abcd', np.not_equal(peaks_v2, peaks_binary).astype(np.uint8) * 255)
-            #peaks_unthresh = np.logical_and.reduce((map>=map_left, map>=map_right, map>=map_up, map>=map_down))
-            #print peaks_unthresh.dtype
-            #cv2.imshow('peaks_binary', peaks_unthresh.astype(np.uint8) * 255)
-            #cv2.waitKey(100000)
-            peaks = zip(np.nonzero(peaks_binary)[1], np.nonzero(peaks_binary)[0]) # note reverse
-            
-            peaks_with_score = [x + (map_ori[x[1],x[0]],) for x in peaks]
-            id = range(peak_counter, peak_counter + len(peaks))
-            peaks_with_score_and_id = [peaks_with_score[i] + (id[i],) for i in range(len(id))]
-
-            all_peaks.append(peaks_with_score_and_id)
-            #print len(peaks)
-            peak_counter += len(peaks)
-            
-        print 'peak finding old took:', time.time() - PEAKT
-
-    #print all_peaks
-    #maps = 
-    PEAKT = time.time()
-    all_peaks = []
-    peak_counter = 0
-    TT = 0.0
-    g = 0.0
-    # finds channel-wise peaks in CNN output
-    for part in xrange(N_JOINTS):
-        map_ori = heatmap_avg[part, :, :]
-        pp = time.time()
-        map_s = blurred_avg[part, :, :]
-
-        g += time.time() - pp
-        KK = time.time()
-
-        map_max =  map_s * (map_s == maximum_filter(map_s, footprint=np.ones((3, 3)), mode='constant', cval=0.0))
-        peaks_binary = map_max > param_['thre1']
-        TT += time.time() - KK
-        
-        peak_idxs = np.nonzero(peaks_binary)
-        
-        k_peaks = peak_idxs[0].shape[0]
-        #print k_peaks
-        scores = map_ori[peak_idxs] # [x + (map_ori[x[1],x[0]],) for x in peaks]
-        if k_peaks == 0:
-            all_peaks.append([])
-
-        ids = np.linspace(peak_counter, peak_counter + k_peaks, k_peaks, endpoint=False, dtype=np.int)
-        scores_and_id = np.stack(peak_idxs[::-1] + (scores, ids), axis=1)
-        all_peaks.append(scores_and_id)
-        peak_counter += k_peaks
-        
-    #print 'gauss :', g, len(all_peaks), len(mapIdx)
-    #print 'peak finding took:', time.time() - PEAKT, TT
 
     connection_all = []
     special_k = []
@@ -344,7 +239,11 @@ def handle_one(oriImg, dont_draw=False):
 
     # don't really know how this works
     for k in xrange(len(mapIdx)):
-        score_mid = paf_avg[[x-19 for x in mapIdx[k]],:,:]
+        idxs = []
+        for x in mapIdx[k]:
+            idxs.append(x - 19)
+
+        score_mid = paf_avg[idxs,:,:]
         candA = all_peaks[limbSeq[k][0]-1]
         candB = all_peaks[limbSeq[k][1]-1]
         nA = len(candA)
@@ -363,19 +262,22 @@ def handle_one(oriImg, dont_draw=False):
                     
                     startend = zip(np.linspace(candA[i][0], candB[j][0], num=mid_num), \
                                    np.linspace(candA[i][1], candB[j][1], num=mid_num))
-                    vec_x = np.array([score_mid[0, int(round(startend[I][1])), int(round(startend[I][0]))] \
-                                      for I in range(len(startend))])
-                    vec_y = np.array([score_mid[1, int(round(startend[I][1])), int(round(startend[I][0]))] \
-                                      for I in range(len(startend))])
+                    
+                    vec_x = np.zeros(len(startend))
+                    vec_y = np.zeros(len(startend))
+
+                    for I in xrange(len(startend)):
+                        vec_x[I] = score_mid[0, int(round(startend[I][1])), int(round(startend[I][0]))]
+                        vec_y[I] = score_mid[1, int(round(startend[I][1])), int(round(startend[I][0]))] 
 
                     score_midpts = np.multiply(vec_x, vec[0]) + np.multiply(vec_y, vec[1])
-                    score_with_dist_prior = sum(score_midpts)/len(score_midpts) + min(0.5*oriImg.shape[0]/norm-1, 0)
+                    score_with_dist_prior = np.sum(score_midpts)/len(score_midpts) + min(0.5*oriImg.shape[0]/norm-1, 0)
                     criterion1 = len(np.nonzero(score_midpts > param_['thre2'])[0]) > 0.8 * len(score_midpts)
                     criterion2 = score_with_dist_prior > 0
                     if criterion1 and criterion2:
                         connection_candidate.append([i, j, score_with_dist_prior, score_with_dist_prior+candA[i][2]+candB[j][2]])
 
-            connection_candidate = sorted(connection_candidate, key=lambda x: x[2], reverse=True)
+            connection_candidate = sorted(connection_candidate, key=get_third_item, reverse=True)
             connection = np.zeros((0,5))
             for c in range(len(connection_candidate)):
                 i,j,s = connection_candidate[c][0:3]
@@ -389,11 +291,15 @@ def handle_one(oriImg, dont_draw=False):
             special_k.append(k)
             connection_all.append([])
 
-    #print 'mapIdx processing took:', time.time() - KTTT, len(mapIdx)
     # last number in each row is the total parts number of that person
     # the second last number in each row is the score of the overall configuration
     subset = -1 * np.ones((0, 20))
-    candidate = np.array([item for sublist in all_peaks for item in sublist])
+    cand_tmp = []
+    for sublist in all_peaks:
+        for item in sublist:
+            cand_tmp.append(item)
+
+    candidate = np.asarray(cand_tmp)
 
     # don't really know how this works either
     for k in xrange(len(mapIdx)):
@@ -436,12 +342,12 @@ def handle_one(oriImg, dont_draw=False):
                     row[indexA] = partAs[i]
                     row[indexB] = partBs[i]
                     row[-1] = 2
-                    row[-2] = sum(candidate[connection_all[k][i,:2].astype(int), 2]) + connection_all[k][i][2]
+                    row[-2] = np.sum(candidate[connection_all[k][i,:2].astype(int), 2]) + connection_all[k][i][2]
                     subset = np.vstack([subset, row])
 
     #print subset.shape
     # delete some rows of subset which has few parts occur
-    deleteIdx = [];
+    deleteIdx = []
     for i in range(len(subset)):
         if subset[i][-1] < 4 or subset[i][-2]/subset[i][-1] < 0.4:
             deleteIdx.append(i)
@@ -467,15 +373,14 @@ def handle_one(oriImg, dont_draw=False):
                 )
             res['found_ppl'].append(skel)
         return res
-#    canvas = cv2.imread(test_image) # B,G,R order
+
     p = time.time()
-    #print 'canshape', canvas.shape
     canvas = canvas.copy()
 
 
     for i in range(N_JOINTS):
         for j in range(len(all_peaks[i])):
-            cv2.circle(canvas, tuple(all_peaks[i][j][0:2].astype(np.int).tolist()), 4, colors[i], thickness=-1)
+            cv2.circle(canvas, all_peaks[i][j][0:2], 4, colors[i], thickness=-1)
 
     stickwidth = 4
 
@@ -499,95 +404,5 @@ def handle_one(oriImg, dont_draw=False):
             cv2.putText(canvas, str(i), (int(mY), int(mX)), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 0), 2)
             canvas = cv2.addWeighted(canvas, 0.4, cur_canvas, 0.6, 0)
 
-    print 'drawing took: ', time.time() - p
+    print('drawing took: ', time.time() - p)
     return canvas
-
-
-def ip_cam_stream(mjpeg_stream):
-    ''' yields frames from an mjpeg stream '''
-    stream = urllib.urlopen(mjpeg_stream)
-    bytes = ''
-    while True:
-        bytes += stream.read(1024)
-        a = bytes.find('\xff\xd8')
-        b = bytes.find('\xff\xd9')
-        if a != -1 and b != -1:
-            jpg = bytes[a:b + 2]
-            bytes = bytes[b + 2:]
-            yield cv2.imdecode(np.fromstring(jpg, dtype=np.uint8),
-                               cv2.IMREAD_COLOR)
-
-
-source = '/home/studio/Desktop/5bed4a512eb9e1b380c5a195711365fd.jpg'
-source_debug = '/home/studio/Desktop/ppltest.jpg'
-
-korea_source = 'http://121.66.95.189:8080/cam_1.cgi'
-
-
-if __name__ == '__main__':
-    print 'warming up'
-    _ = handle_one(np.ones((1, 320,320,3)))
-
-    frame = cv2.imread(source_debug)
-    #frame = cv2.resize(frame, (2000, 3000))
-    #frame = cv2.resize(frame, (500, 300))
-    t = time.time()
-    for _ in range(1):
-        canvas = handle_one(np.ascontiguousarray(frame), dont_draw=True)
-        print canvas
-    # Display the resulting frame
-    cv2.imshow('Video', canvas)
-    print 'tot:', time.time() - t, 'avg:', (time.time() - t) / 10.0
-    if cv2.waitKey(1000000) & 0xFF == ord('q'):
-        pass
-
-    # When everything is done, release the capture
-    cv2.destroyAllWindows()
-
-if __name__ == '__main__':
-    print 'warming up'
-    _ = handle_one(np.ones((1, 320,320,3)))
-    source = 'http://71.196.34.213:80/mjpg/video.mjpg?COUNTER'
-    source = 'http://203.138.220.33:80/mjpg/video.mjpg?COUNTER'
-    source = 'http://220.240.123.205:80/mjpg/video.mjpg?COUNTER'
-    source = 'http://210.249.39.236:80/mjpg/video.mjpg?COUNTER'
-    source = 'http://121.66.95.189:8080/cam_1.cgi'
-    for frame in ip_cam_stream(source):
-        # Capture frame-by-frame
-        if frame is None:
-            print 'none frame'
-        #frame = cv2.resize(frame, (500, 300))
-        canvas = handle_one(np.ascontiguousarray(frame))
-
-        # Display the resulting frame
-        cv2.imshow('Video', canvas)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    # When everything is done, release the capture
-    video_capture.release()
-    cv2.destroyAllWindows()
-
-
-
-if __name__ == "__main__":
-    print 'warming up'
-    _ = handle_one(np.ones((1, 320,320,3)))
-    
-    video_capture = cv2.VideoCapture(0)
-
-    while True:
-        # Capture frame-by-frame
-        ret, frame = video_capture.read()
-        canvas = handle_one(frame)
-
-        # Display the resulting frame
-        cv2.imshow('Video', canvas)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    # When everything is done, release the capture
-    video_capture.release()
-    cv2.destroyAllWindows()

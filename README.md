@@ -1,32 +1,26 @@
-# Pose World
+# Pose World & [Superboneworld](https://vimeo.com/217268832)
 
-This is the raw code for http://golancourses.net/excap17/a/04/13/a-event/
+This is the source code for [http://golancourses.net/excap17/a/04/13/a-event/](http://golancourses.net/excap17/a/05/11/a-final/)
+and [http://golancourses.net/excap17/a/05/11/a-final/](http://golancourses.net/excap17/a/05/11/a-final/) & [Superboneworld](https://vimeo.com/217268832217268832)
 
-**This relies entirely on [tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation](https://github.com/tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation). Reproduced below is the README.md at the time of this project.**
+**This is heavily based off [tensorboy/pytorch Realtime Multi-Person Pose Estimation](https://github.com/tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation). Reproduced after this section is the README.md of it at the time of this project.**
 
-My modifications to it include optimising the handle_one function in [web_demo.py](web_demo.py) and adding [Websocket](http_demo.py) and [zmq](zmq_stuff/zmq_cv.py) servers that expose an api to be able to remotely use this. 
+My modifications to it include cleaning up the code, making it somewhat more modular and optimising the `handle_one` function in [infer.py](infer.py) that performs a single forward pass and connects the 'joint heatmap' into skeletons. It also no longer resizes images to be a square before processing them, since it is fully convlutional it can work with images of all sizes. Generally the processing time is dominated by the post-processing of the joint-heatmap into skeletons.
 
-In the [js/](js/) folder is an example client for the Websocket server, in the [zmq_stuff](zmq_stuff) folder is the (now possibly somewhat broken!) zmq client and server. 
+I have also created various servers, clients and scripts:
 
-To use the client, `cd js` and `npm install`, then make a `places.json` in the [js/](js/) folder, following the template:
-```
-{
-    "place_name" : {
-        "url":"mjpeg stream url",
-        "corner": [top left corner of drawn camera, top right corner of drawn camera],
-        "resize_to": [width to resize frames to before processing, height to resize frames to before processing],
-        "colour": [r, g, b colour of drawn skeleton]
-    },
+* [Websocket](http_demo.py) with [Javascript client](js/main.js). Currently this consumes an mjpeg stream and outputs the skeletons present in the stream in realtime, but would be trivial to modify to consume other video streams. 
+* [ZMQ](zmq_stuff/zmq_cv.ppy) with [ZMQ client](zmq_stuff/zmq_sub_client.py). Currently this consumes an mjpeg stream as with the Websocket server. There is also a [REQ-REP client](zmq_stuff/zmq_cv_client.py) present.
+* The script [vid_demo.py](vid_demo.py) processes video files into a json that contains a `frames` array that contains the bone positions for the skeletons (disambiguated between skeletons) in the video per frame. There is a [Javascript visualiser](js/vid_main.js) that can load this information. This is [Superboneworld](https://vimeo.com/217268832217268832). 
 
-}
-```
-Then, you can do `beefy main.js` to serve the client.
-An example `places.json` is included. 
+The pose jsons used for Superboneworld are available at: [https://drive.google.com/open?id=0B-7CCAaMeqWDN3N0Y1U1UjZlQm8](https://drive.google.com/open?id=0B-7CCAaMeqWDN3N0Y1U1UjZlQm8)
 
-## pytorch_Realtime_Multi-Person_Pose_Estimation
-This is a pytorch version of Realtime_Multi-Person_Pose_Estimation, origin code is here https://github.com/ZheC/Realtime_Multi-Person_Pose_Estimation 
+Untar the file inside the [js/](js/) folder such that you have a folder named `jsons` containing the frame-by-frame json description (i.e `js/jsons/A_AP_Ferg_-_Shabba_Explicit_ft._A_AP_ROCKY-iXZxipry6kE.json`, `js/jsons/JAK VYPADÁ MŮJ PARKOUR TRÉNINK #3 _ TARY-xgrWm_g8hno.json` etc...).
 
-**This relies entirely on [tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation](https://github.com/tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation). Reproduced below is the README.md at the time of this project.**
+**This project relies heavily on [tensorboy/pytorch Realtime Multi-Person Pose Estimation](https://github.com/tensorboy/pytorch_Realtime_Multi-Person_Pose_Estimation). Reproduced below is the README.md at the time of this project.**
+
+## pytorch Realtime Multi-Person Pose Estimation
+This is a pytorch version of Realtime Multi-Person Pose Estimation, origin code is here [ZheC/Realtime Multi-Person Pose Estimation](https://github.com/ZheC/Realtime_Multi-Person_Pose_Estimation)
 
 ## Introduction
 Code repo for reproducing 2017 CVPR Oral paper using pytorch.  
@@ -43,7 +37,7 @@ Code repo for reproducing 2017 CVPR Oral paper using pytorch.
 - `cd model; sh get_model.sh` to download caffe model or download converted pytorch model(https://www.dropbox.com/s/ae071mfm2qoyc8v/pose_model.pth?dl=0).
 - `cd caffe_to_pytorch; python convert.py` to convert a trained caffe model to pytorch model. The converted model have relative error less than 1e-6, and will be located in `./model` after converted.
 - `pythont picture_demo.py` to run the picture demo.
-- `pythont web_demo.py` to run the web demo.
+- `pythont infer.py` to run the web demo.
 
 ## Training
 TODO

@@ -3,7 +3,7 @@ import zmq
 import numpy as np
 import time
 import ujson
-from web_demo import *
+from infer import *
 from zmq_utils import *
 
 PORT = None
@@ -47,6 +47,7 @@ if __name__ == '__main__':
         canvas = handle_one(frame)
         send_ndarray_multipart(sock, canvas, 'uk_barber')
 
+"""
 if __name__ == '__main__':
     ctx = zmq.Context()
     sock = ctx.socket(zmq.REP)
@@ -85,3 +86,4 @@ if __name__ == '__main__':
         canvas = np.transpose(canvas, (2, 0, 1))
         send_ndarray(sock, np.ascontiguousarray(canvas, dtype=np.uint8))
     # send_ndarray(sock, np.ascontiguousarray(canvas, dtype=np.uint8))
+"""
