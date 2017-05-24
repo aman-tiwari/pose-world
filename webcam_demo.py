@@ -17,7 +17,8 @@ if __name__ == "__main__":
         canvas = handle_one(frame)
 
         # Display the resulting frame
-        cv2.imshow('Video', canvas)
+        if canvas is not None:
+            cv2.imshow('Video', canvas)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
