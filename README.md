@@ -10,7 +10,7 @@ My modifications to it include cleaning up the code, making it somewhat more mod
 I have also created various servers, clients and scripts:
 
 * [Websocket](http_demo.py) with [Javascript client](js/main.js). Currently this consumes an mjpeg stream and outputs the skeletons present in the stream in realtime, but would be trivial to modify to consume other video streams. 
-* [ZMQ](zmq_stuff/zmq_cv.ppy) with [ZMQ client](zmq_stuff/zmq_sub_client.py). Currently this consumes an mjpeg stream as with the Websocket server. There is also a [REQ-REP client](zmq_stuff/zmq_cv_client.py) present.
+* [ZMQ](zmq_stuff/zmq_cv.py) with [ZMQ client](zmq_stuff/zmq_sub_client.py). Currently this consumes an mjpeg stream as with the Websocket server. There is also a [REQ-REP client](zmq_stuff/zmq_cv_client.py) present.
 * The script [vid_demo.py](vid_demo.py) processes video files into a json that contains a `frames` array that contains the bone positions for the skeletons (disambiguated between skeletons) in the video per frame. There is a [Javascript visualiser](js/vid_main.js) that can load this information. This is [Superboneworld](https://vimeo.com/217268832217268832). 
 
 The pose jsons used for Superboneworld are available at: [https://drive.google.com/open?id=0B-7CCAaMeqWDN3N0Y1U1UjZlQm8](https://drive.google.com/open?id=0B-7CCAaMeqWDN3N0Y1U1UjZlQm8)
